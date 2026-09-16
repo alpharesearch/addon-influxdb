@@ -59,11 +59,15 @@ Both installations mount `share:rw`, so `/share` is the same directory in each
 one. That allows a hand-off without either app ever needing the other's ports:
 
 1. Take a full snapshot of Home Assistant first.
-1. Open a shell on the Home Assistant host: `ha host login`, or SSH into Home
-   Assistant OS as root. The Terminal & SSH add-on does not ship the InfluxDB
-   client, so the commands below run inside the containers themselves. On a
-   managed install, `docker exec` is a debugging escape hatch rather than a
-   supported feature.
+1. Get somewhere that can run `influxd`. The stock Terminal & SSH add-on
+   cannot: it ships no InfluxDB client, and its `ha` CLI has no host-shell
+   command -- `ha host` only offers `info`, `logs`, `options`, `reboot`,
+   `reload`, `shutdown` and `disks`. Install **Advanced SSH & Web Terminal**
+   and turn off its **Protection mode**: with protection mode off, that app has
+   access to the host's Docker instance, which is what the commands below use.
+   Note what that means -- while protection mode is off, that app is
+   root-equivalent on your installation, so switch it back on (or uninstall it)
+   as soon as the migration is through.
 1. Find the two containers. Their names carry a per-repository hash prefix,
    which is why the old add-on and this app have different names:
 
@@ -93,10 +97,17 @@ one. That allows a hand-off without either app ever needing the other's ports:
 the restored databases, or Home Assistant will connect happily and write
 nothing at all.
 
-### Alternative: expose the RPC service during the migration
+### Alternative: run the backup client from another machine
 
-To run the commands from another machine instead, let the app bind the RPC
-service to all interfaces through its own `envvars` option:
+`influxd backup` and `influxd restore` also act as clients against a remote RPC
+endpoint, so you can skip host access altogether. Fetch the same version the app
+ships (1.8.10) and use the `influxd` binary inside:
+
+- amd64: <https://dl.influxdata.com/influxdb/releases/influxdb-1.8.10_linux_amd64.tar.gz>
+- arm64: <https://dl.influxdata.com/influxdb/releases/influxdb-1.8.10_linux_arm64.tar.gz>
+
+Expose the RPC service of the installation you read from -- and, for the
+restore, of the one you write to -- through the app's `envvars` option:
 
 ```yaml
 envvars:
@@ -104,11 +115,14 @@ envvars:
     value: "0.0.0.0:8088"
 ```
 
-`influxd backup -host homeassistant.local:8088 …` then works from anywhere that
-can reach the host. **That RPC service has no authentication at all**: anyone
-who can reach the port can read and write every database. Turn it on only while
-you migrate, do not publish `8088/tcp` beyond the host itself unless you are
-sure you need it, and remove the `envvars` entry when you are done.
+One catch with this route: only one of the two installations can hold host port
+`8088` at a time, so leave it on the old add-on during the migration and give
+this app `8089` (or nothing) until the old one is gone.
+
+**That RPC service has no authentication at all**: anyone who can reach the port
+can read and write every database. Enable it only while you migrate, do not
+publish `8088/tcp` beyond the host itself unless you are sure you need it, and
+remove the `envvars` entry when you are done.
 
 ### Not migrating is a legitimate option too
 
