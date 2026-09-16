@@ -44,9 +44,10 @@ things block a copy-paste migration, and neither is obvious:
   runs, give this app other host ports -- `8087` and `8089` are free -- and
   switch them back after you uninstall the old one. The containers listen on
   their own `8086` regardless, so this affects only how you and Home Assistant
-  address them: point the `influxdb:` integration at port `8087` for the
-  duration and put it back afterwards. Nothing in the app config needs to
-  change.
+  address them: during the migration point the `influxdb:` integration at this
+  app's own host name (`<repository-id>-influxdb`, see "Integrating into Home
+  Assistant") on port `8087`, and put both back afterwards. Nothing in the app
+  config needs to change.
 - **`influxd backup` reaches the daemon over port 8088, inside the container.**
   That service binds `127.0.0.1:8088` and, in InfluxDB 1.x, it cannot be told
   to listen elsewhere: the default `influxdb.conf` shipped by both the community
@@ -151,8 +152,11 @@ then fails every write. Verify before you remove anything:
 
 Once the measurements are there and Home Assistant's log is quiet about
 InfluxDB: stop and uninstall the community add-on, set this app's Network ports
-back to `8086` and `8088`, restart, and put the `influxdb:` integration back on
-`8086`. Then delete `/share/influx-migration` -- a portable backup is an
+back to `8086` and `8088`, restart, and point the `influxdb:` integration at
+this app -- `host: <repository-id>-influxdb` on port `8086`. Do not leave the
+`host:` of the old installation in place: that alias is attached to the old
+container and disappears with it, which stops writes silently rather than
+loudly. Then delete `/share/influx-migration` -- a portable backup is an
 unauthenticated plaintext copy of your entire history, and every app with
 `share` access can read it.
 
@@ -324,7 +328,7 @@ Now we've got this in place, add the following snippet to your Home Assistant
 
 ```yaml
 influxdb:
-  host: influxdb
+  host: dd4ddeab-influxdb
   port: 8086
   database: homeassistant
   username: homeassistant
@@ -335,12 +339,22 @@ influxdb:
 
 Restart Home Assistant.
 
-Apps are reachable from Home Assistant under their slug, which is why
-`host: influxdb` works. If that does not resolve on your installation, the
-`8086/tcp` port of this app is published to the host by default, so
-`host: homeassistant.local` works as well. Older installations of the
-community add-on used the host name `a0d7b954-influxdb`; that name belongs to
-the old installation, not to this one.
+Home Assistant Core and this app share the internal `hassio` Docker network, so
+this hop involves no published ports at all. The host name is
+**`<repository-id>-influxdb`**, _not_ `influxdb`: Supervisor registers
+`App.hostname`, which is the app slug with underscores replaced by dashes
+(`supervisor/apps/model.py`), as both the container hostname and its DNS alias
+(`supervisor/docker/app.py`). An app installed from a custom repository gets
+that repository's id as the first half of its slug -- the same prefix you see in
+`docker ps` as `app_dd4ddeab_influxdb` -- so the name used above is
+`dd4ddeab-influxdb`. It changes if you uninstall this app and install it from a
+different repository URL, so confirm it with `docker ps` instead of copying a
+value from a guide. The name `a0d7b954-influxdb`, which the community add-on
+installations use, belongs to that installation and stops resolving once it is
+uninstalled.
+
+If the alias does not resolve on your installation, `8086/tcp` of this app is
+published to the host by default, so `host: homeassistant.local` works as well.
 
 You should now see the data flowing into InfluxDB by visiting the web-interface
 and using the Data Explorer.
