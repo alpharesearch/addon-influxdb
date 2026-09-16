@@ -1,35 +1,64 @@
-# Home Assistant Community Add-on: InfluxDB
+# Home Assistant App: InfluxDB
 
-InfluxDB is an open source time series database optimized for high-write-volume.
-It's useful for recording metrics, sensor data, events,
+[InfluxDB][influxdb] is an open source time series database optimized for
+high-write-volume. It's useful for recording metrics, sensor data, events,
 and performing analytics. It exposes an HTTP API for client interaction and is
 often used in combination with Grafana to visualize the data.
 
-This add-on comes with Chronograf & Kapacitor pre-installed as well. Which
+This app comes with Chronograf & Kapacitor pre-installed as well. Which
 gives you a nice InfluxDB admin interface for managing your users, databases,
 data retention settings, and lets you peek inside the database using the
 Data Explorer.
 
+**Note**: _This app is a community fork. The Home Assistant Community Add-ons
+project marked the original add-on end-of-life in August 2026 because
+InfluxData end-of-lifed InfluxDB 1.x. See
+[About this fork](#about-this-fork) for what that means for you._
+
 ## Installation
 
-The installation of this add-on is pretty straightforward and not different in
-comparison to installing any other Home Assistant add-on.
+1. Add this repository to Home Assistant: **Settings → Apps → ⋮ (three dots)
+   → Add repository**, and paste:
+   `https://github.com/alpharesearch/addon-influxdb`
 
-1. Click the Home Assistant My button below to open the add-on on your Home
-   Assistant instance.
+   Or click the button below, which does both steps at once.
 
-   [![Open this add-on in your Home Assistant instance.][addon-badge]][addon]
+   [![Open this app in your Home Assistant instance.][my-badge]][my]
 
-1. Click the "Install" button to install the add-on.
-1. Start the "InfluxDB" add-on.
+1. Click the "Install" button to install the app.
+1. Start the "InfluxDB" app.
 1. Check the logs of the "InfluxDB" to see if everything went well.
 1. Click the "OPEN WEB UI" button!
 
+The app is shipped as a pre-built multi-arch image
+(`ghcr.io/alpharesearch/influxdb`) for `amd64` and `aarch64`, so nothing is
+compiled on your machine.
+
+## Migrating from the community add-on
+
+The community add-on and this app are separate installations to the
+Supervisor, even though they share the same slug. Installing this app does
+**not** take over the data of an existing community add-on installation, and
+backing up the old add-on does not restore into this one.
+
+The supported way to move the data is an InfluxDB level backup:
+
+1. Make a full snapshot of your Home Assistant instance first.
+1. In the old add-on, make sure port `8088/tcp` is available, then create a
+   backup with `influxd backup` (the add-on maps it for exactly this purpose).
+1. Install and start this app, and create a matching user/database.
+1. Restore with `influxd restore` into this app.
+
+There is no tested, one-click upgrade path, and both installations use
+disk while they co-exist. If you have a large database, check your free space
+beforehand. If you only care about going forward, it is perfectly reasonable
+to install this app fresh and let Home Assistant write new history into it.
+
 ## Configuration
 
-**Note**: _Remember to restart the add-on when the configuration is changed._
+**Note**: _Remember to restart the app when the configuration is changed._
 
-Example add-on configuration:
+Example app configuration:
 
 ```yaml
 log_level: info
@@ -47,7 +76,7 @@ envvars:
 
 ### Option: `log_level`
 
-The `log_level` option controls the level of log output by the addon and can
+The `log_level` option controls the level of log output by the app and can
 be changed to be more or less verbose, which might be useful when you are
 dealing with an unknown issue. Possible values are:
 
@@ -56,7 +85,7 @@ dealing with an unknown issue. Possible values are:
 - `info`: Normal (usually) interesting events.
 - `warning`: Exceptional occurrences that are not errors.
 - `error`: Runtime errors that do not require immediate action.
-- `fatal`: Something went terribly wrong. Add-on becomes unusable.
+- `fatal`: Something went terribly wrong. The app becomes unusable.
 
 Please note that each level automatically includes log messages from a
 more severe level, e.g., `debug` also shows `info` messages. By default,
@@ -99,7 +128,7 @@ The private key file to use for SSL.
 This allows the setting of Environment Variables to control InfluxDB
 configuration as documented at:
 
-<https://docs.influxdata.com/influxdb/v1.7/administration/config/#configuration-settings>
+<https://docs.influxdata.com/influxdb/v1.8/administration/config/#configuration-settings>
 
 **Note**: _Changing these options can possibly cause issues with you instance.
 USE AT YOUR OWN RISK!_
@@ -117,11 +146,11 @@ full details. Values should always be entered as a string (even true/false value
 
 ### Option: `leave_front_door_open`
 
-Adding this option to the add-on configuration allows you to disable
+Adding this option to the app configuration allows you to disable
 authentication on the Web Terminal by setting it to `true` and leaving the
 username and password empty.
 
-**Note**: _We STRONGLY suggest, not to use this, even if this add-on is
+**Note**: _We STRONGLY suggest, not to use this, even if this app is
 only exposed to your internal network. USE AT YOUR OWN RISK!_
 
 ## Integrating into Home Assistant
@@ -131,7 +160,7 @@ state changes to an InfluxDB database.
 
 You need to do the following steps in order to get this working:
 
-- Click on "OPEN WEB UI" to open the admin web-interface provided by this add-on.
+- Click on "OPEN WEB UI" to open the admin web-interface provided by this app.
 - On the left menu click on the "InfluxDB Admin".
 - Create a database for storing Home Assistant's data in, e.g., `homeassistant`.
 - Go to the users tab and create a user for Home Assistant,
@@ -144,7 +173,7 @@ Now we've got this in place, add the following snippet to your Home Assistant
 
 ```yaml
 influxdb:
-  host: a0d7b954-influxdb
+  host: influxdb
   port: 8086
   database: homeassistant
   username: homeassistant
@@ -155,6 +184,13 @@ influxdb:
 
 Restart Home Assistant.
 
+Apps are reachable from Home Assistant under their slug, which is why
+`host: influxdb` works. If that does not resolve on your installation, the
+`8086/tcp` port of this app is published to the host by default, so
+`host: homeassistant.local` works as well. Older installations of the
+community add-on used the host name `a0d7b954-influxdb`; that name belongs to
+the old installation, not to this one.
+
 You should now see the data flowing into InfluxDB by visiting the web-interface
 and using the Data Explorer.
 
@@ -162,16 +198,36 @@ Full details of the Home Assistant integration can be found here:
 
 <https://www.home-assistant.io/integrations/influxdb/>
 
+## About this fork
+
+The Home Assistant Community Add-ons project marked this add-on end-of-life in
+August 2026 (see [upstream][upstream]), because it is built on InfluxDB 1.x,
+which InfluxData no longer supports. This repository continues the work as a
+Home Assistant **app**.
+
+What this fork does: keeps the app building and running on current Home
+Assistant versions, keeps the container base image patched, keeps the
+packaging current, and takes care of the app-format migration.
+
+What this fork cannot do: ship security fixes for InfluxDB 1.8.10, Chronograf
+or Kapacitor, because their upstream vendors no longer release them for the
+1.x line. InfluxDB 1.8.10 is the final 1.8 release. If none of this fits your
+needs yet and you are starting from scratch today, consider a maintained time
+series database instead.
+
 ## Known issues and limitations
 
-- While the Chronograph interface supports SSL, currently, the add-on does
+- While the Chronograf interface supports SSL, currently, the app does
   not support having SSL on InfluxDB. This limitation is caused by
   Chronograf and we are still looking into a proper solution for this.
+- The `armv7` architecture is no longer supported since version 6.0.0. The
+  current app specification and base images cover `aarch64` and `amd64` only.
+- InfluxDB 1.x is end-of-life upstream; see [About this fork](#about-this-fork).
 
 ## Changelog & Releases
 
 This repository keeps a change log using [GitHub's releases][releases]
-functionality.
+functionality, and the app ships a [`CHANGELOG.md`][changelog] as well.
 
 Releases are based on [Semantic Versioning][semver], and use the format
 of `MAJOR.MINOR.PATCH`. In a nutshell, the version will be incremented
@@ -181,33 +237,36 @@ based on the following:
 - `MINOR`: Backwards-compatible new features and enhancements.
 - `PATCH`: Backwards-compatible bugfixes and package updates.
 
+The version in `config.yaml` is also the tag of the published container image,
+so releases have to be tagged with exactly that version, e.g., `6.0.0`.
+
 ## Support
 
 Got questions?
 
 You have several options to get them answered:
 
-- The [Home Assistant Community Add-ons Discord chat server][discord] for add-on
-  support and feature requests.
-- The [Home Assistant Discord chat server][discord-ha] for general Home
+- The [Home Assistant Discord chat server][discord] for general Home
   Assistant discussions and questions.
 - The Home Assistant [Community Forum][forum].
 - Join the [Reddit subreddit][reddit] in [/r/homeassistant][reddit]
 
-You could also [open an issue here][issue] GitHub.
+You could also [open an issue here][issue] GitHub. Please understand that this
+is a small, best-effort fork: issues are welcome, guarantees are not.
 
 ## Authors & contributors
 
-The original setup of this repository is by [Franck Nijhof][frenck].
-
-For a full list of all authors and contributors,
-check [the contributor's page][contributors].
+This repository is a fork of the Home Assistant Community Add-on, written and
+maintained from 2018 to 2026 by [Franck Nijhof][frenck] and
+[the contributors of that project][contributors]. The original setup of this
+fork is by [Markus Schulz][maintainer].
 
 ## License
 
 MIT License
 
-Copyright (c) 2018-2025 Franck Nijhof
+Copyright (c) 2018-2026 Franck Nijhof
+Copyright (c) 2026 Markus Schulz (fork modifications)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -227,15 +286,17 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-[addon-badge]: https://my.home-assistant.io/badges/supervisor_addon.svg
-[addon]: https://my.home-assistant.io/redirect/supervisor_addon/?addon=a0d7b954_influxdb&repository_url=https%3A%2F%2Fgithub.com%2Fhassio-addons%2Frepository
+[changelog]: CHANGELOG.md
 [contributors]: https://github.com/hassio-addons/addon-influxdb/graphs/contributors
-[discord-ha]: https://discord.gg/c5DvZ4e
 [discord]: https://discord.me/hassioaddons
-[forum-shield]: https://img.shields.io/badge/community-forum-brightgreen.svg
-[forum]: https://community.home-assistant.io/t/home-assistant-community-add-on-influxdb/54491?u=frenck
+[forum]: https://community.home-assistant.io/t/home-assistant-community-add-on-influxdb/54491
 [frenck]: https://github.com/frenck
-[issue]: https://github.com/hassio-addons/addon-influxdb/issues
+[influxdb]: https://www.influxdata.com/product/
+[issue]: https://github.com/alpharesearch/addon-influxdb/issues
+[maintainer]: https://github.com/alpharesearch
+[my-badge]: https://my.home-assistant.io/badges/supervisor_app.svg
+[my]: https://my.home-assistant.io/redirect/supervisor_app/?app=influxdb&repository_url=https%3A%2F%2Fgithub.com%2Falpharesearch%2Faddon-influxdb
 [reddit]: https://reddit.com/r/homeassistant
-[releases]: https://github.com/hassio-addons/addon-influxdb/releases
+[releases]: https://github.com/alpharesearch/addon-influxdb/releases
 [semver]: https://semver.org/spec/v2.0.0.html
+[upstream]: https://github.com/hassio-addons/addon-influxdb
