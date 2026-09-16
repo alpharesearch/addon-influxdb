@@ -4,6 +4,31 @@ All notable changes to this Home Assistant app are documented in this file.
 The format is based on [Keep a Changelog][keepachangelog] and this project
 adheres to [Semantic Versioning][semver].
 
+## 6.0.2
+
+### Changed
+
+- Documentation only; the packaged software is unchanged since 6.0.0.
+- The integration instructions no longer put connection settings in
+  `configuration.yaml`. Home Assistant's InfluxDB integration is configured
+  through the UI: its manifest sets `config_flow` and `single_config_entry`,
+  `async_setup` only imports YAML into a config entry, `issue.py` files a
+  `deprecated_yaml` repair issue with `breaks_in_ha_version="2026.9.0"`, and
+  `async_setup_entry` builds the client from `entry.data`. Editing `host:`,
+  `username:` or `password:` there therefore changes nothing on Core 2026.9 and
+  later, which presents as writes silently stopping while Grafana keeps showing
+  the old data.
+- Documents what `configuration.yaml` still controls -- `max_retries`,
+  `default_measurement`, `override_measurement`, `precision`, `measurement_attr`,
+  `include`, `exclude`, `tags`, `tags_attributes`, `ignore_attributes` and the
+  `component_config` overrides -- since `async_setup_entry` reads those from the
+  YAML file on every setup.
+- The URL field of the UI flow takes a scheme, which is what selects TLS, and
+  the connection is validated before the entry is stored.
+- Grafana is mentioned by name as a second client whose data source URL has to
+  change when the app's alias changes, with `homeassistant.local` given as the
+  alternative that does not.
+
 ## 6.0.1
 
 ### Changed
