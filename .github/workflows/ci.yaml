@@ -1,6 +1,16 @@
 ---
 name: CI
 
+# This workflow follows hassio-addons/workflows app-ci v4.0.0, with two
+# deliberate differences: the app linter does not run in `community` mode (that
+# mode belongs to the repository-updater pipeline and requires version: dev),
+# and actions/dependency-review-action is left out. It needs a dependency graph
+# snapshot of the base branch, which this fork did not have, so it hard-failed;
+# and even with one it has nothing to analyse here, because the repository has
+# no package manifests and the Dockerfile base image arrives through
+# `ARG BUILD_FROM`, which the graph parser cannot resolve. Renovate covers the
+# base image and the Debian package pins instead.
+
 # yamllint disable-line rule:truthy
 on:
   pull_request:
@@ -145,18 +155,6 @@ jobs:
           persist-credentials: false
       - name: 🚀 Run zizmor
         uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
-
-  dependency-review:
-    name: Dependency review
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: ⤵️ Check out code from GitHub
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: 👀 Dependency review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
   build:
     name: Build ${{ matrix.architecture }}
