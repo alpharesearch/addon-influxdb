@@ -21,9 +21,9 @@ Even better: You could submit a pull request with a fix / new feature!
 1. Search our repository for open or closed [pull requests][prs] that relates
    to your submission. You don't want to duplicate effort.
 
-1. You may merge the pull request in once you have the sign-off of two other
-   developers, or if you do not have permission to do that, you may request
-   the second reviewer to merge it for you.
+1. You may merge the pull request once it fits the direction of this fork; if
+   you do not have merge rights, the maintainer will review and merge it for
+   you. Since this is a one-maintainer fork, reviews may take a while.
 
-[github]: https://github.com/hassio-addons/addon-influxdb/issues
-[prs]: https://github.com/hassio-addons/addon-influxdb/pulls
+[github]: https://github.com/alpharesearch/addon-influxdb/issues
+[prs]: https://github.com/alpharesearch/addon-influxdb/pulls
