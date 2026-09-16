@@ -1,0 +1,55 @@
+---
+configuration:
+  log_level:
+    name: Log level
+    description: >-
+      Controls the level of log output by the app and can be changed to be
+      more or less verbose, which might be useful when you are dealing with
+      an unknown issue. Each level automatically includes the messages of a
+      more severe level.
+  auth:
+    name: Authentication
+    description: >-
+      Enables or disables InfluxDB user authentication. Turning this off is
+      not recommended.
+  reporting:
+    name: Usage reporting
+    description: >-
+      InfluxDB sends anonymous usage statistics to InfluxData. No data from
+      your databases is ever transmitted.
+  ssl:
+    name: SSL
+    description: >-
+      Enables or disables SSL (HTTPS) for direct access to the web interface.
+      This has no effect on InfluxDB itself, nor on the Ingress service.
+  certfile:
+    name: Certificate file
+    description: >-
+      The certificate file to use for SSL. The file must be stored in the
+      `/ssl/` directory.
+  keyfile:
+    name: Private key file
+    description: >-
+      The private key file to use for SSL. The file must be stored in the
+      `/ssl/` directory.
+  envvars:
+    name: Environment variables
+    description: >-
+      InfluxDB settings that are passed to the server as environment
+      variables, for example `INFLUXDB_HTTP_LOG_ENABLED`. Names must start
+      with `INFLUXDB_` and are case sensitive. Changing these can break the
+      app; use at your own risk.
+  leave_front_door_open:
+    name: Disable authentication
+    description: >-
+      Turns off the Home Assistant login check on the direct ports, leaving
+      the web interface open to anybody who can reach it. Do not enable this.
+network:
+  80/tcp: >-
+    Web interface. Not required for Ingress, which is the recommended way to
+    reach the admin interface.
+  8086/tcp: >-
+    The InfluxDB API. Home Assistant, Grafana and any other writer or reader
+    of your metrics connects here.
+  8088/tcp: >-
+    The InfluxDB RPC service used by `influxd backup` and `influxd restore`.
