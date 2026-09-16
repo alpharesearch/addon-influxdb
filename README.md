@@ -52,7 +52,9 @@ If you are moving over from the community add-on, read
 [Migrating from the community add-on](influxdb/DOCS.md#migrating-from-the-community-add-on)
 before you install: the two installations collide on ports `8086`/`8088`, the
 backup cannot reach the daemon through the published port, and Home Assistant's
-`influxdb: host:` has to point at the new installation.
+`influxdb:` integration entry in the Home Assistant UI has to be re-pointed at
+the new installation -- it is configured in the UI, not in
+`configuration.yaml`, since Home Assistant 2026.9.
 
 **Be aware:** InfluxDB 1.8.10, Chronograf and Kapacitor are upstream
 end-of-life products. This fork keeps them installable, packaged and running

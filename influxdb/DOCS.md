@@ -44,10 +44,10 @@ things block a copy-paste migration, and neither is obvious:
   runs, give this app other host ports -- `8087` and `8089` are free -- and
   switch them back after you uninstall the old one. The containers listen on
   their own `8086` regardless, so this affects only how you and Home Assistant
-  address them: during the migration point the `influxdb:` integration at this
-  app's own host name (`<repository-id>-influxdb`, see "Integrating into Home
-  Assistant") on port `8087`, and put both back afterwards. Nothing in the app
-  config needs to change.
+  address them: during the migration point the InfluxDB **integration entry**
+  (**Settings → Integrations → InfluxDB → ⋮ → Configure**) at this app, URL
+  `http://<repository-id>-influxdb:8087`, and put it back afterwards. Nothing in
+  this app's own configuration needs to change.
 - **`influxd backup` reaches the daemon over port 8088, inside the container.**
   That service binds `127.0.0.1:8088` and, in InfluxDB 1.x, it cannot be told
   to listen elsewhere: the default `influxdb.conf` shipped by both the community
@@ -152,13 +152,13 @@ then fails every write. Verify before you remove anything:
 
 Once the measurements are there and Home Assistant's log is quiet about
 InfluxDB: stop and uninstall the community add-on, set this app's Network ports
-back to `8086` and `8088`, restart, and point the `influxdb:` integration at
-this app -- `host: <repository-id>-influxdb` on port `8086`. Do not leave the
-`host:` of the old installation in place: that alias is attached to the old
-container and disappears with it, which stops writes silently rather than
-loudly. Then delete `/share/influx-migration` -- a portable backup is an
-unauthenticated plaintext copy of your entire history, and every app with
-`share` access can read it.
+back to `8086` and `8088`, restart, and re-point the InfluxDB integration entry
+at this app -- URL `http://<repository-id>-influxdb:8086`. Do not leave the URL
+of the old installation in place: that alias belongs to the old container and
+vanishes with it, and the failure is quiet rather than loud -- Grafana goes on
+plotting the restored history while nothing new arrives. Then delete
+`/share/influx-migration` -- a portable backup is an unauthenticated plaintext
+copy of your entire history, and every app with `share` access can read it.
 
 If Home Assistant was already writing into this app before the restore, do not
 mix the two timelines; restore beside them and compare:
@@ -314,48 +314,77 @@ only exposed to your internal network. USE AT YOUR OWN RISK!_
 The `influxdb` integration of Home Assistant makes it possible to transfer all
 state changes to an InfluxDB database.
 
-You need to do the following steps in order to get this working:
+Create the database and the user first, in this app's admin interface:
 
 - Click on "OPEN WEB UI" to open the admin web-interface provided by this app.
 - On the left menu click on the "InfluxDB Admin".
 - Create a database for storing Home Assistant's data in, e.g., `homeassistant`.
-- Go to the users tab and create a user for Home Assistant,
-  e.g., `homeassistant`.
-- Add "ALL" to "Permissions" of the created user, to allow writing to your
-  database.
+- Go to the users tab and create a user for Home Assistant, e.g.,
+  `homeassistant`, and add "ALL" to its "Permissions". Skipping that grant is a
+  classic mistake: such a user authenticates happily and then rejects every
+  single write.
 
-Now we've got this in place, add the following snippet to your Home Assistant
-`configuration.yaml` file.
+The connection itself belongs to the **integration UI**, not to
+`configuration.yaml`. Go to **Settings → Integrations → Add Integration →
+InfluxDB**, choose **InfluxDB v1**, and fill in:
+
+- **URL**: `http://dd4ddeab-influxdb:8086`. The scheme decides TLS, so use
+  `https://` when the app's `ssl` option is on.
+- **Verify SSL**: off unless Home Assistant trusts the certificate.
+- **Database**: `homeassistant`.
+- **Username** / **Password**: the user created above.
+
+Home Assistant tests the connection before it stores the entry, so a wrong host
+or password fails visibly there instead of quietly later.
+
+**Why not YAML for the connection?** In
+`homeassistant/components/influxdb`, the manifest declares `config_flow: true`
+and `single_config_entry: true`, `async_setup` exists only to import YAML into a
+config entry, `issue.py` files a `deprecated_yaml` repair issue carrying
+`breaks_in_ha_version="2026.9.0"`, and `async_setup_entry` builds the client
+from `entry.data`. On Core 2026.9 and later that means editing `host:`,
+`username:` or `password:` under `influxdb:` in `configuration.yaml` changes
+nothing whatsoever -- the stored integration entry is what counts. When moving an
+existing installation to a new InfluxDB host, change the URL under
+**Settings → Integrations → InfluxDB → ⋮ → Configure**, then delete those keys
+from `configuration.yaml` to close the repair issue. Symptom of getting this
+wrong: Home Assistant's own dashboards stop updating while Grafana keeps
+plotting the old history, because the old host name simply no longer resolves.
+
+What `configuration.yaml` still controls is the _content_ of what is written.
+`async_setup_entry` reads these keys from the YAML file on every setup, because
+the UI has no equivalent for them:
 
 ```yaml
 influxdb:
-  host: dd4ddeab-influxdb
-  port: 8086
-  database: homeassistant
-  username: homeassistant
-  password: <yourpassword>
   max_retries: 3
   default_measurement: state
+  include:
+    entities:
+      - sensor.radon_level
+      - switch.radon_fan
 ```
 
-Restart Home Assistant.
+The same applies to `precision`, `measurement_attr`, `override_measurement`,
+`exclude`, `tags`, `tags_attributes`, `ignore_attributes` and the
+`component_config` overrides.
 
+The host name in that URL is **`<repository-id>-influxdb`**, _not_ `influxdb`.
 Home Assistant Core and this app share the internal `hassio` Docker network, so
-this hop involves no published ports at all. The host name is
-**`<repository-id>-influxdb`**, _not_ `influxdb`: Supervisor registers
-`App.hostname`, which is the app slug with underscores replaced by dashes
-(`supervisor/apps/model.py`), as both the container hostname and its DNS alias
-(`supervisor/docker/app.py`). An app installed from a custom repository gets
-that repository's id as the first half of its slug -- the same prefix you see in
-`docker ps` as `app_dd4ddeab_influxdb` -- so the name used above is
-`dd4ddeab-influxdb`. It changes if you uninstall this app and install it from a
-different repository URL, so confirm it with `docker ps` instead of copying a
-value from a guide. The name `a0d7b954-influxdb`, which the community add-on
-installations use, belongs to that installation and stops resolving once it is
-uninstalled.
-
-If the alias does not resolve on your installation, `8086/tcp` of this app is
-published to the host by default, so `host: homeassistant.local` works as well.
+this hop involves no published ports at all, and Supervisor registers
+`App.hostname` -- the app slug with underscores replaced by dashes
+(`supervisor/apps/model.py`) -- as both the container hostname and its DNS alias
+(`supervisor/docker/app.py`). An app installed from a custom repository gets that
+repository's id as the first half of its slug, the prefix you also see in
+`docker ps` as `app_dd4ddeab_influxdb`. That name changes if you uninstall this
+app and install it from a different repository URL, so confirm it with
+`docker ps` rather than copying a value from a guide; `a0d7b954-influxdb`, used
+by community add-on installations, belongs to that installation and stops
+resolving once it is removed. If the alias does not resolve on your installation,
+`8086/tcp` is published to the host by default and
+`http://homeassistant.local:8086` works instead -- the sturdier choice for other
+clients such as Grafana, whose data source URL otherwise has to be edited every
+time this app is reinstalled.
 
 You should now see the data flowing into InfluxDB by visiting the web-interface
 and using the Data Explorer.
