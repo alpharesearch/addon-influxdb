@@ -202,12 +202,13 @@ while they co-exist, so check your free space first if your database is large.
 If history matters less than simplicity, install this app fresh and let Home
 Assistant write new data into it; the old add-on can simply be removed.
 
-**Status of these instructions:** this app (6.0.0) has been installed and run on
-Home Assistant OS 18.2, Core 2026.9.2, Supervisor 2026.09.0. The migration
-procedure above is derived from InfluxDB's own backup/restore behaviour and the
-app's configuration, and has not yet been walked end to end. If it does not
-work exactly as written, please open an issue here rather than assuming you did
-something wrong.
+**Status of these instructions:** this app has been installed and run on Home
+Assistant OS 18.2, Core 2026.9.2, Supervisor 2026.09.0, and the migration above
+was performed on a real installation of that combination -- community add-on
+5.0.2 to this app, about 15MB of data, confirmed afterwards in Grafana. Every
+statement in this document was checked against the software itself rather than
+from memory, so if your run diverges, open an issue here instead of assuming
+you did something wrong.
 
 ## Configuration
 

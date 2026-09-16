@@ -1,6 +1,6 @@
 ---
 name: InfluxDB
-version: 6.0.0
+version: 6.0.1
 slug: influxdb
 description: Scalable datastore for metrics, events, and real-time analytics
 url: https://github.com/alpharesearch/addon-influxdb
