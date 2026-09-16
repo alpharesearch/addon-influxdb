@@ -367,7 +367,8 @@ influxdb:
 
 The same applies to `precision`, `measurement_attr`, `override_measurement`,
 `exclude`, `tags`, `tags_attributes`, `ignore_attributes` and the
-`component_config` overrides.
+`component_config` overrides. Restart Home Assistant after changing any of them:
+they are read when the integration is set up, not live.
 
 The host name in that URL is **`<repository-id>-influxdb`**, _not_ `influxdb`.
 Home Assistant Core and this app share the internal `hassio` Docker network, so
