@@ -4,6 +4,33 @@ All notable changes to this Home Assistant app are documented in this file.
 The format is based on [Keep a Changelog][keepachangelog] and this project
 adheres to [Semantic Versioning][semver].
 
+## 6.0.1
+
+### Changed
+
+- Documentation only; the packaged software is identical to 6.0.0.
+- The migration procedure was carried out end to end for the first time
+  (community add-on 5.0.2 to this app on Home Assistant OS 18.2/amd64, about
+  15MB) and has been rewritten around what that run actually required.
+- `influxd backup` and `influxd restore` examples no longer show credential
+  flags. They never had any: in 1.8 both commands contain no HTTP support at all
+  and talk only to the RPC port, so `auth: true` does not concern them.
+- Restore flags are given as 1.8 spells them (`-newdb`, `-rp`, `-newrp`,
+  `-metadir`, `-datadir`, `-online`); `-new-database` and `-overwrite` do not
+  exist.
+- Recreating the Home Assistant user is now an explicit step including its
+  `GRANT`, because a portable backup contains no users and a user without
+  privileges authenticates and then rejects every write.
+- Getting a shell: `ha host login` does not exist. Use the console of the HAOS
+  VM, or Advanced SSH & Web Terminal with protection mode disabled, which is
+  root-equivalent until protection mode is switched back on.
+- Backups must not be staged under HAOS `/tmp` or `/`, which share the ~254MB
+  system partition and are normally full. Note also that `docker cp` reports
+  success even when the file it copied was truncated.
+- The InfluxDB host name to give Home Assistant is `<repository-id>-influxdb`,
+  not `influxdb`: Supervisor registers `App.hostname`, which is the slug with
+  underscores replaced by dashes, as the container alias.
+
 ## 6.0.0
 
 ### Changed

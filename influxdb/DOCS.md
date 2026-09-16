@@ -36,78 +36,150 @@ compiled on your machine.
 
 ## Migrating from the community add-on
 
-The community add-on and this app are two separate installations as far as the
-Supervisor is concerned, even though they share the same slug. Installing this
-app does **not** take over the data of an existing community add-on
-installation, and a Supervisor backup of the old add-on cannot be restored
-into this one.
+If the community add-on is still installed, read this before you start. Two
+things block a copy-paste migration, and neither is obvious:
 
-Two facts shape the procedure:
+- **Ports collide.** Both installations publish `8086/tcp` and `8088/tcp`, and
+  Supervisor does not warn you in advance. While the community add-on still
+  runs, give this app other host ports -- `8087` and `8089` are free -- and
+  switch them back after you uninstall the old one. The containers listen on
+  their own `8086` regardless, so this affects only how you and Home Assistant
+  address them: during the migration point the `influxdb:` integration at this
+  app's own host name (`<repository-id>-influxdb`, see "Integrating into Home
+  Assistant") on port `8087`, and put both back afterwards. Nothing in the app
+  config needs to change.
+- **`influxd backup` reaches the daemon over port 8088, inside the container.**
+  That service binds `127.0.0.1:8088` and, in InfluxDB 1.x, it cannot be told
+  to listen elsewhere: the default `influxdb.conf` shipped by both the community
+  add-on and this app writes no `rpc-bind-address` key, and 1.8.10 does not
+  recognise the setting -- check `influxd help` before trusting a
+  `rpc-bind-address` line, because it is silently ignored rather than rejected.
+  So a command like `influxd backup -host homeassistant.local:8088` cannot
+  succeed while the RPC port stays on loopback, which is its default.
 
-- **The two cannot run at the same time with default settings.** Both publish
-  `8086/tcp` and `8088/tcp` to the host, so whichever one starts second fails
-  with `Port 8086/tcp is already in use`. (`80/tcp` is unmapped by default and
-  the Ingress port is internal to each app, so neither of those clashes.)
-- **The published `8088/tcp` port answers nothing.** InfluxDB 1.8 binds its
-  backup and restore RPC service to `127.0.0.1:8088` inside the container, so
-  there is nothing listening on the host mapping. Re-pointing that host port to
-  something else does not help either.
+### Get a shell that can run `influxd`
 
-### Recommended: hand the backup over `/share`
+The Terminal & SSH add-on is a dead end here: it ships no InfluxDB client, and
+its `ha` CLI has no host-shell command -- `ha host` only offers `info`, `logs`,
+`options`, `reboot`, `reload`, `shutdown` and `disks`. Pick one of these:
 
-Both installations mount `share:rw`, so `/share` is the same directory in each
-one. That allows a hand-off without either app ever needing the other's ports:
+1. **The console of the HAOS VM**, if Home Assistant OS runs as a guest on
+   Proxmox or another hypervisor. Log in as root there and the `docker` CLI is
+   available. Best option: nothing extra to install, nothing privileged left
+   running afterwards.
+1. **Advanced SSH & Web Terminal with Protection mode disabled.** With
+   protection mode off that app gets access to the host's Docker instance.
+   Understand the trade-off first: while protection mode is off, that app is
+   root-equivalent on your installation, so switch it back on or uninstall it
+   as soon as you are done.
+1. **No host access at all**, by running the backup client from another machine
+   against a temporarily exposed RPC port. See the last subsection.
 
-1. Take a full snapshot of Home Assistant first.
-1. Get somewhere that can run `influxd`. The stock Terminal & SSH add-on
-   cannot: it ships no InfluxDB client, and its `ha` CLI has no host-shell
-   command -- `ha host` only offers `info`, `logs`, `options`, `reboot`,
-   `reload`, `shutdown` and `disks`. Install **Advanced SSH & Web Terminal**
-   and turn off its **Protection mode**: with protection mode off, that app has
-   access to the host's Docker instance, which is what the commands below use.
-   Note what that means -- while protection mode is off, that app is
-   root-equivalent on your installation, so switch it back on (or uninstall it)
-   as soon as the migration is through.
-1. Find the two containers. Their names carry a per-repository hash prefix,
-   which is why the old add-on and this app have different names:
+### Back up and restore through `/share`
 
-   ```bash
-   docker ps --format '{{.Names}}'
-   ```
+Walked end to end in September 2026 from community add-on 5.0.2 to this app
+6.0.0 on Home Assistant OS 18.2 (amd64), 15 MB of data. Both installations
+mount `share:rw`, so `/share` is the same directory in each of them and nothing
+has to be copied between containers.
 
-1. Back up from the old installation into the shared folder:
+Find the container names first. They carry a per-repository hash prefix, which
+is why the old add-on and this app differ even though both end in `influxdb`:
 
-   ```bash
-   docker exec -it <old-container> influxd backup -portable \
-     -host 127.0.0.1:8088 /share/influx-migration
-   ```
+```console
+$ docker ps | grep influx
+2f117c38a17f  ghcr.io/alpharesearch/influxdb:6.0.0  ...  app_dd4ddeab_influxdb
+d482e29956eb  ghcr.io/hassio-addons/influxdb/amd64:5.0.2  ...  app_a0d7b954_influxdb
+```
 
-1. Stop **and uninstall** the old add-on. This is what frees `8086`/`8088`.
-1. Install and start this app, then restore into it:
+Back up from the old container straight into `/share`:
 
-   ```bash
-   docker exec -it <influxdb-container> influxd restore -portable \
-     -host 127.0.0.1:8088 /share/influx-migration
-   ```
+```console
+# docker exec app_a0d7b954_influxdb sh -c 'influxd backup -portable \
+#   -db homeassistant -host 127.0.0.1:8088 /share/influx-migration'
+```
 
-1. Restart this app and check the Data Explorer shows your old data.
+Then restore it inside this app. Both installations can still be running while
+you do: the command only ever touches the container's own loopback RPC port.
 
-**Users are not part of a portable backup.** Recreate your `homeassistant` user
-(and any others you had) under "InfluxDB Admin" → Users, and grant it access to
-the restored databases, or Home Assistant will connect happily and write
-nothing at all.
+```console
+# docker exec app_dd4ddeab_influxdb sh -c 'influxd restore -portable \
+#   -host 127.0.0.1:8088 /share/influx-migration'
+```
 
-### Alternative: run the backup client from another machine
+Four things about those two commands that cost somebody an afternoon:
 
-`influxd backup` and `influxd restore` also act as clients against a remote RPC
-endpoint, so you can skip host access altogether. Fetch the same version the app
-ships (1.8.10) and use the `influxd` binary inside:
+- **Quote the command you hand to `docker exec`.** With `docker exec c du -sh
+/data/*` the _host_ shell expands the glob before Docker runs anything, and
+  `/data` does not exist there. Wrap the whole thing in `sh -c '...'`.
+- **Neither command takes credentials**, and `auth: true` does not affect them:
+  InfluxDB 1.8 `influxd backup` and `influxd restore` have no `net/http` and no
+  username handling at all -- they speak only to the RPC port, which is exactly
+  why that port is loopback-bound. There is no `-username` flag to pass.
+- **Restoring needs the target flag names of 1.8**: `-host`, `-portable`, `-db`,
+  `-newdb`, `-rp`, `-newrp`, `-metadir`, `-datadir`, `-online`. `-new-database`
+  and `-overwrite` do not exist.
+- **Never stage backups under `/tmp` or `/` on Home Assistant OS.** Those live
+  on the ~254MB system partition, which is normally sitting at 100%. `/share` is
+  on the data partition. A truncated copy is not detected: `docker cp` reported
+  `Successfully copied 14.9MB` for a backup set whose last file it had cut off
+  mid-write, so prefer `/share` or a direct pipe (`docker exec old tar -C /data
+-cf - dir | docker exec -i new tar -C /data -xf -`) over copying.
+
+Then recreate the user Home Assistant logs in with. **A portable backup never
+contains users** -- restore in 1.8 has no concept of them -- and this app only
+ever creates `chronograf` and `kapacitor`, from the secret in `/data/secret`,
+which it derives from your Supervisor token. A fresh install therefore has no
+`homeassistant` user and HA's writes fail with `unauthorized` until you make
+one. Leave `/data/secret` alone.
+
+```console
+# docker exec -it app_dd4ddeab_influxdb sh -c 'influx -username chronograf \
+#   -password "$(cat /data/secret)" \
+#   -execute "CREATE USER homeassistant WITH PASSWORD '''<your-password>'''"'
+# docker exec -it app_dd4ddeab_influxdb sh -c 'influx -username chronograf \
+#   -password "$(cat /data/secret)" \
+#   -execute "GRANT READ, WRITE ON homeassistant TO homeassistant"'
+```
+
+The `GRANT` is not optional: a user without privileges authenticates fine and
+then fails every write. Verify before you remove anything:
+
+```console
+# docker exec -it app_dd4ddeab_influxdb sh -c 'influx -username chronograf \
+#   -password "$(cat /data/secret)" -database homeassistant \
+#   -execute "SHOW MEASUREMENTS" | head -20'
+```
+
+Once the measurements are there and Home Assistant's log is quiet about
+InfluxDB: stop and uninstall the community add-on, set this app's Network ports
+back to `8086` and `8088`, restart, and point the `influxdb:` integration at
+this app -- `host: <repository-id>-influxdb` on port `8086`. Do not leave the
+`host:` of the old installation in place: that alias is attached to the old
+container and disappears with it, which stops writes silently rather than
+loudly. Then delete `/share/influx-migration` -- a portable backup is an
+unauthenticated plaintext copy of your entire history, and every app with
+`share` access can read it.
+
+If Home Assistant was already writing into this app before the restore, do not
+mix the two timelines; restore beside them and compare:
+
+```console
+# docker exec app_dd4ddeab_influxdb sh -c 'influxd restore -portable \
+#   -host 127.0.0.1:8088 -db homeassistant -newdb homeassistant_old \
+#   /share/influx-migration'
+```
+
+### Without a host shell
+
+`influxd backup` and `influxd restore` also work as clients against a remote RPC
+endpoint. Fetch the same version the app ships (1.8.10) and use the `influxd`
+binary inside:
 
 - amd64: <https://dl.influxdata.com/influxdb/releases/influxdb-1.8.10_linux_amd64.tar.gz>
 - arm64: <https://dl.influxdata.com/influxdb/releases/influxdb-1.8.10_linux_arm64.tar.gz>
 
-Expose the RPC service of the installation you read from -- and, for the
-restore, of the one you write to -- through the app's `envvars` option:
+Expose the RPC service of each installation in turn through the app's `envvars`
+option:
 
 ```yaml
 envvars:
@@ -115,9 +187,8 @@ envvars:
     value: "0.0.0.0:8088"
 ```
 
-One catch with this route: only one of the two installations can hold host port
-`8088` at a time, so leave it on the old add-on during the migration and give
-this app `8089` (or nothing) until the old one is gone.
+Only one of the two installations can hold host port `8088` at a time, so leave
+it on the old add-on while both exist and give this app `8089` or nothing.
 
 **That RPC service has no authentication at all**: anyone who can reach the port
 can read and write every database. Enable it only while you migrate, do not
@@ -131,12 +202,13 @@ while they co-exist, so check your free space first if your database is large.
 If history matters less than simplicity, install this app fresh and let Home
 Assistant write new data into it; the old add-on can simply be removed.
 
-**Status of these instructions:** this app (6.0.0) has been installed and run on
-Home Assistant OS 18.2, Core 2026.9.2, Supervisor 2026.09.0. The migration
-procedure above is derived from InfluxDB's own backup/restore behaviour and the
-app's configuration, and has not yet been walked end to end. If it does not
-work exactly as written, please open an issue here rather than assuming you did
-something wrong.
+**Status of these instructions:** this app has been installed and run on Home
+Assistant OS 18.2, Core 2026.9.2, Supervisor 2026.09.0, and the migration above
+was performed on a real installation of that combination -- community add-on
+5.0.2 to this app, about 15MB of data, confirmed afterwards in Grafana. Every
+statement in this document was checked against the software itself rather than
+from memory, so if your run diverges, open an issue here instead of assuming
+you did something wrong.
 
 ## Configuration
 
@@ -257,7 +329,7 @@ Now we've got this in place, add the following snippet to your Home Assistant
 
 ```yaml
 influxdb:
-  host: influxdb
+  host: dd4ddeab-influxdb
   port: 8086
   database: homeassistant
   username: homeassistant
@@ -268,12 +340,22 @@ influxdb:
 
 Restart Home Assistant.
 
-Apps are reachable from Home Assistant under their slug, which is why
-`host: influxdb` works. If that does not resolve on your installation, the
-`8086/tcp` port of this app is published to the host by default, so
-`host: homeassistant.local` works as well. Older installations of the
-community add-on used the host name `a0d7b954-influxdb`; that name belongs to
-the old installation, not to this one.
+Home Assistant Core and this app share the internal `hassio` Docker network, so
+this hop involves no published ports at all. The host name is
+**`<repository-id>-influxdb`**, _not_ `influxdb`: Supervisor registers
+`App.hostname`, which is the app slug with underscores replaced by dashes
+(`supervisor/apps/model.py`), as both the container hostname and its DNS alias
+(`supervisor/docker/app.py`). An app installed from a custom repository gets
+that repository's id as the first half of its slug -- the same prefix you see in
+`docker ps` as `app_dd4ddeab_influxdb` -- so the name used above is
+`dd4ddeab-influxdb`. It changes if you uninstall this app and install it from a
+different repository URL, so confirm it with `docker ps` instead of copying a
+value from a guide. The name `a0d7b954-influxdb`, which the community add-on
+installations use, belongs to that installation and stops resolving once it is
+uninstalled.
+
+If the alias does not resolve on your installation, `8086/tcp` of this app is
+published to the host by default, so `host: homeassistant.local` works as well.
 
 You should now see the data flowing into InfluxDB by visiting the web-interface
 and using the Data Explorer.

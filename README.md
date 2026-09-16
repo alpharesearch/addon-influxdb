@@ -48,6 +48,12 @@ that work:
 - Home Assistant **app** format: add this repository under
   **Settings → Apps → ⋮ → Add repository**.
 
+If you are moving over from the community add-on, read
+[Migrating from the community add-on](influxdb/DOCS.md#migrating-from-the-community-add-on)
+before you install: the two installations collide on ports `8086`/`8088`, the
+backup cannot reach the daemon through the published port, and Home Assistant's
+`influxdb: host:` has to point at the new installation.
+
 **Be aware:** InfluxDB 1.8.10, Chronograf and Kapacitor are upstream
 end-of-life products. This fork keeps them installable, packaged and running
 on current Home Assistant versions; it cannot provide security fixes that
